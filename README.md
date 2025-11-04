@@ -12,7 +12,7 @@ This GUI application offers simple and efficient way to calibrate your M3T therm
 7. Select "Convert Thermal Images". It will first ask you for an export folder to save the images.
 
 # Notes
-- This is the initial release! So there may be bugs and the UI looks ugly.
+- The UI looks ugly.
 - Currently tested on the DJI M3T images. 
 - This application automatically transfers all RTK and flight information!
 - Only enable "Infrared Image Super-Resolution Mode" if you know your images are captured in this mode.

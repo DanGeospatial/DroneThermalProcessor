@@ -4,7 +4,7 @@ authors:
   - family-names: "Nelson"
     given-names: "Daniel"
     orcid: "https://orcid.org/0009-0005-5200-6652"
-title: "DJI M3T Thermal Converter"
-version: 2.5.0
-date-released: 2025-10-10
-url: "https://github.com/DanGeospatial/DronePathPreview"
+title: "Drone Thermal Processor"
+version: 2.6.0
+date-released: 2025-11-04
+url: "https://github.com/DanGeospatial/DroneThermalProcessor"
