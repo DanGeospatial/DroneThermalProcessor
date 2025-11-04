@@ -32,8 +32,8 @@ def convert_and_copy(image_p, file_name, out_dir, sdk_dir, em, hum, dist, refl, 
     input_name = file_name.replace('.JPG', "").replace('.TIF', "")
     raw_out = out_dir + '/' + input_name + '.raw'
     tiff_out = out_dir + '/' + input_name + '.tif'
-    # --ambient instead of --reflection
-    sdk_cmd = f"{sdk_dir} -s {image_p} -a measure -o {raw_out} --measurefmt float32 --emissivity {em} --humidity {hum} --distance {dist} --ambient {refl}"
+    # --ambient instead of --reflection ?
+    sdk_cmd = f"{sdk_dir} -s {image_p} -a measure -o {raw_out} --measurefmt float32 --emissivity {em} --humidity {hum} --distance {dist} --reflection {refl}"
     subprocess.run(sdk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
 
     rows, cols = res
@@ -338,7 +338,7 @@ class DroneWidget(QtWidgets.QWidget):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
-    app.setApplicationDisplayName("DJI M3T Thermal Converter")
+    app.setApplicationDisplayName("Drone Thermal Processor")
 
     freeze_support()
 
