@@ -2,7 +2,7 @@
 DJI Mavic drones save thermal images in a thermogram format. This format is not compatible with photogrammetry pipelines (e.g., Agisoft Metashape, Pix4D).
 This GUI application offers simple and efficient way to calibrate your M3T thermal images and convert them to .tif format. 
 
-<img src="DTP.jpg" alt="Program" width="309" height="480">
+<img src="DTP.JPG" alt="Program" width="309" height="480">
 
 # Usage
 1. Download required software. 
