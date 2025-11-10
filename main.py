@@ -25,7 +25,7 @@ from multiprocessing import freeze_support
 from os import scandir
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS, IFD
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtWidgets, QtGui
 
 
 def convert_and_copy(image_p, file_name, out_dir, sdk_dir, em, hum, dist, refl, exif_dir, res):
@@ -339,6 +339,9 @@ class DroneWidget(QtWidgets.QWidget):
 if __name__ == "__main__":
     app = QtWidgets.QApplication([])
     app.setApplicationDisplayName("Drone Thermal Processor")
+    # icon_path = os.path.join(sys._MEIPASS, 'Resources/SensorsCpl_1017.ico')
+    icon_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'SensorsCpl_1017.ico'))
+    app.setWindowIcon(QtGui.QIcon(icon_path))
 
     freeze_support()
 
