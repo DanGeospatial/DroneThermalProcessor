@@ -28,24 +28,56 @@ from PIL.ExifTags import TAGS, GPSTAGS, IFD
 from PySide6 import QtCore, QtWidgets, QtGui
 
 
-def convert_and_copy(image_p, file_name, out_dir, sdk_dir, em, hum, dist, refl, exif_dir, res):
-    input_name = file_name.replace('.JPG', "").replace('.TIF', "")
-    raw_out = out_dir + '/' + input_name + '.raw'
-    tiff_out = out_dir + '/' + input_name + '.tif'
-    # --ambient instead of --reflection ?
-    sdk_cmd = f"{sdk_dir} -s {image_p} -a measure -o {raw_out} --measurefmt float32 --emissivity {em} --humidity {hum} --distance {dist} --reflection {refl}"
-    subprocess.run(sdk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=CREATE_NO_WINDOW)
+file_extensions = (".jpg", ".jpeg", ".tif", ".tiff")
 
-    rows, cols = res
-    binary_data = np.fromfile(raw_out, dtype=np.float32).reshape((rows, cols))
-    pil_image = Image.fromarray(binary_data, mode='F')
-    pil_image.save(tiff_out)
 
-    sdk_cmd_exif = f"{exif_dir} -tagsfromfile {image_p} {tiff_out}"
-    subprocess.run(sdk_cmd_exif, creationflags=CREATE_NO_WINDOW)
+def convert_and_copy(image_p, file_name, out_dir, sdk_dir, em, hum, dist, refl, amb, exif_dir, res):
+    print(f"Converting: {file_name}")
 
-    os.remove(raw_out)
-    os.remove(tiff_out + '_original')
+    raw_out = os.path.join(out_dir, f"{os.path.splitext(file_name)[0]}.raw")
+    tiff_out = os.path.join(out_dir, f"{os.path.splitext(file_name)[0]}.tif")
+
+    sdk_cmd = [
+        sdk_dir,
+        "-s", image_p,
+        "-a", "measure",
+        "-o", raw_out,
+        "--measurefmt", "float32",
+        "--emissivity", str(em),
+        "--humidity", str(hum),
+        "--distance", str(dist),
+        "--reflection", str(refl),
+        "--ambient", str(amb)
+    ]
+    result = subprocess.run(sdk_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            creationflags=CREATE_NO_WINDOW, check=True)
+    if result.stderr:
+        print(result.stderr.decode().strip())
+
+    try:
+        rows, cols = res
+        binary_data = np.fromfile(raw_out, dtype=np.float32).reshape((rows, cols))
+        pil_image = Image.fromarray(binary_data, mode='F')
+        pil_image.save(tiff_out)
+    except FileNotFoundError:
+        print(f"{raw_out} not found.")
+
+    sdk_cmd_exif = [
+        exif_dir,
+        "-tagsfromfile", image_p,
+        tiff_out
+    ]
+    result = subprocess.run(sdk_cmd_exif, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            creationflags=CREATE_NO_WINDOW, check=True)
+    if result.stderr:
+        print(result.stderr.decode().strip())
+
+    # Future Add counter for progress and number of files converted
+    for f in (raw_out, tiff_out + '_original'):
+        try:
+            os.remove(f)
+        except FileNotFoundError:
+            pass
 
 
 def get_drone_stats(folder_name: str):
@@ -57,7 +89,7 @@ def get_drone_stats(folder_name: str):
     with scandir(folder_name) as it:
         for file in it:
             if file.is_file():
-                if file.name.endswith('.JPG') or file.name.endswith('.TIF'):
+                if file.name.lower().endswith(file_extensions):
                     img = Image.open(file)
                     exif = img.getexif()
                     try:
@@ -79,13 +111,14 @@ def get_drone_stats(folder_name: str):
 
 
 def get_gps_exif(folder_name: str):
+    # This function will be rewritten
     altitudes = []
     num_images = 0
 
     with scandir(folder_name) as it:
         for file in it:
             if file.is_file():
-                if file.name.endswith('.JPG') or file.name.endswith('.TIF'):
+                if file.name.lower().endswith(file_extensions):
                     num_images += 1
                     gps_dict = {}
                     img = Image.open(file)
@@ -104,7 +137,7 @@ def get_gps_exif(folder_name: str):
                                 if tag == 'GPSAltitude':
                                     altitudes.append(float(v))
                                     gps_dict.update({"GPSAltitude": float(v)})
-                                    gps_dict.update({"id": file.name.replace('.JPG', "").replace('.TIF', "")})
+                                    gps_dict.update({"id": file.name.replace('.JPG', "").replace('.jpeg', "").replace('.TIF', "")})
                                 if tag == 'GPSLatitude':
                                     gps_dict.update({"GPSLatitude": v})
                                 if tag == 'GPSLongitude':
@@ -144,7 +177,10 @@ class DroneWidget(QtWidgets.QWidget):
         self.distance_box_button = QtWidgets.QPushButton("Set Altitude")
         self.reflection_box_label = QtWidgets.QLabel()
         self.reflection_box_label.setFrameStyle(frame_style)
-        self.reflection_box_button = QtWidgets.QPushButton("Set Temperature")
+        self.reflection_box_button = QtWidgets.QPushButton("Set Reflection Temperature")
+        self.ambient_box_label = QtWidgets.QLabel()
+        self.ambient_box_label.setFrameStyle(frame_style)
+        self.ambient_box_button = QtWidgets.QPushButton("Set Ambient Temperature")
 
         self.resolution_check_box = QtWidgets.QCheckBox("Infrared Image Super-Resolution Mode")
         self.resolution_check_box.setToolTip(
@@ -177,9 +213,10 @@ class DroneWidget(QtWidgets.QWidget):
         self.filename = ""
         self.filename_exif = ""
         self.emissivity = 0.96
-        self.humidity = None
-        self.distance = None
-        self.reflection = None
+        self.humidity = 50
+        self.distance = 15
+        self.reflection = 20
+        self.ambient = 20
         self.sdk_dir = ""
         self.sdk_dir_exif = ""
         self.resolution = 512, 640
@@ -197,6 +234,8 @@ class DroneWidget(QtWidgets.QWidget):
         self.layout.addWidget(self.distance_box_label)
         self.layout.addWidget(self.reflection_box_button)
         self.layout.addWidget(self.reflection_box_label)
+        self.layout.addWidget(self.ambient_box_button)
+        self.layout.addWidget(self.ambient_box_label)
         self.layout.addWidget(self.resolution_check_box)
         self.layout.addWidget(self.text_h1)
         self.layout.addWidget(self.text_make)
@@ -207,7 +246,9 @@ class DroneWidget(QtWidgets.QWidget):
         self.layout.addWidget(self.text_num_img)
         self.layout.addWidget(self.text_alt_max)
         self.layout.addWidget(self.text_alt_min)
-
+        # Future Hide buttons when options are not entered
+        # Future Separate GUI from processing threads
+        # Future Auto Download dependencies?
         self.button_open.clicked.connect(self.open_import_dir)
         self.button_sdk.clicked.connect(self.open_sdk_dir)
         self.button_sdk_exif.clicked.connect(self.open_sdk_dir_exif)
@@ -217,6 +258,7 @@ class DroneWidget(QtWidgets.QWidget):
         self.humidity_box_button.clicked.connect(self.open_humidity)
         self.distance_box_button.clicked.connect(self.open_distance)
         self.reflection_box_button.clicked.connect(self.open_reflection)
+        self.ambient_box_button.clicked.connect(self.open_ambient)
         self.resolution_check_box.stateChanged.connect(self.set_resolution)
 
     @QtCore.Slot()
@@ -244,6 +286,7 @@ class DroneWidget(QtWidgets.QWidget):
         if self.dialog_export.exec():
             self.filename = self.dialog_export.selectedUrls()
             self.sdk_dir = self.filename[0].toString().replace('file:///', '')
+            print(self.sdk_dir)
 
     @QtCore.Slot()
     def open_sdk_dir_exif(self):
@@ -251,16 +294,13 @@ class DroneWidget(QtWidgets.QWidget):
         if self.dialog_export_exif.exec():
             self.filename_exif = self.dialog_export_exif.selectedUrls()
             self.sdk_dir_exif = self.filename_exif[0].toString().replace('file:///', '')
+            print(self.sdk_dir_exif)
 
     @QtCore.Slot()
     def open_run(self):
-        # Check if settings are entered
-        if self.humidity or self.distance or self.reflection is None:
-            pass
-        if self.sdk_dir or self.foldername == "":
-            pass
         # Open location to save files
         if self.dialog_save_loc.exec():
+
             self.foldername_out = self.dialog_save_loc.selectedUrls()
             self.foldername_out = self.foldername_out[0].toString().replace(
                 'file:///', '')
@@ -269,11 +309,20 @@ class DroneWidget(QtWidgets.QWidget):
         with scandir(self.foldername) as it:
             for file in it:
                 if file.is_file():
-                    if file.name.endswith('.JPG') or file.name.endswith('.TIF'):
-                        if file.name.replace('.JPG', "").replace('.TIF', "").endswith('_T'):
+                    if file.name.lower().endswith(file_extensions):
+                        if os.path.splitext(file.name)[0].endswith('_T'):
                             image_files.append(file)
 
         num_processes = os.cpu_count()
+        print("Number of files loaded for conversion: " + str(len(image_files)))
+        print("sdk: " + self.sdk_dir)
+        print("em: " + str(self.emissivity))
+        print("hum: " + str(self.humidity))
+        print("distance: " + str(self.distance))
+        print("ref: " + str(self.reflection))
+        print("ref: " + str(self.ambient))
+        print("sdk_dir_exif: " + str(self.sdk_dir_exif))
+        print("resolution: " + str(self.resolution))
 
         with multiprocessing.Pool(processes=num_processes) as pool:
             tasks = [
@@ -286,11 +335,13 @@ class DroneWidget(QtWidgets.QWidget):
                     self.humidity,
                     self.distance,
                     self.reflection,
+                    self.ambient,
                     self.sdk_dir_exif,
                     self.resolution
                 )
                 for p in image_files
             ]
+            print("Run Convert")
             results = pool.starmap(convert_and_copy, tasks)
             pool.close()
             pool.join()
@@ -327,6 +378,14 @@ class DroneWidget(QtWidgets.QWidget):
         if ok:
             self.reflection_box_label.setText(f"{d:g}°C")
             self.reflection = d
+
+    @QtCore.Slot()
+    def open_ambient(self):
+        d, ok = QtWidgets.QInputDialog.getDouble(self, "Enter Ambient Temperature",
+                                                 "Temperature:", 20, -50, 500, 2, step=1)
+        if ok:
+            self.ambient_box_label.setText(f"{d:g}°C")
+            self.ambient = d
 
     @QtCore.Slot()
     def set_resolution(self):
